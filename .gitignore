@@ -1,0 +1,24 @@
+# Runtime data stays on the user's machine.
+/input/*
+!/input/.gitkeep
+/video/*
+!/video/.gitkeep
+/frames/*
+!/frames/.gitkeep
+/output/*
+!/output/.gitkeep
+/models/*
+!/models/.gitkeep
+/tools/*
+!/tools/.gitkeep
+/config.local.json
+/TEST_REPORT.md
+/tests/latest-results.json
+__pycache__/
+*.py[cod]
+*.log
+.venv/
+.env
+.env.*
+!.env.example
+/dist/

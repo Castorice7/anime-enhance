@@ -1,0 +1,14 @@
+{
+  "tools": {
+    "ffmpeg": "ffmpeg",
+    "ffprobe": "ffprobe",
+    "realesrgan": "tools/realesrgan/realesrgan-ncnn-vulkan.exe"
+  },
+  "gpu_id": null,
+  "tile_size": 128,
+  "max_native_output_pixels": 160000000,
+  "sr_mix": {"faithful": 0.65, "clear": 0.85, "ultra": 1.0},
+  "official_channels": {
+    "UC2PeMPA8PAOp-bynLoCeMLA": "Honkai: Star Rail (English)"
+  }
+}

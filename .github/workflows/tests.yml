@@ -1,0 +1,20 @@
+name: CPU regression tests
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  tests:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install Python dependencies
+        run: python -m pip install -r requirements-lock.txt
+      - name: Check syntax
+        run: python -m py_compile workflow.py setup.py tests/test_core.py tests/verify_workflow.py
+      - name: Run CPU tests (GPU integration is verified locally)
+        run: python -m unittest discover -s tests -p "test_*.py" -v
