@@ -68,7 +68,16 @@ def main():
     if not python.exists():
         subprocess.run([sys.executable, '-m', 'venv', ROOT / 'tools/venv'], check=True)
     subprocess.run([python, '-m', 'pip', 'install', '-r', ROOT / 'requirements-lock.txt'], check=True)
-    (ROOT / 'tools/installed-assets.json').write_text(json.dumps(records, indent=2), encoding='utf-8')
+    installed_files = []
+    for base in (ROOT / 'tools/realesrgan', ROOT / 'tools/deno', ROOT / 'models'):
+        if base.is_dir():
+            for path in sorted(p for p in base.rglob('*') if p.is_file()):
+                installed_files.append({'path': path.relative_to(ROOT).as_posix(),
+                                        'sha256': hashlib.sha256(path.read_bytes()).hexdigest()})
+    installation = {'schema': 1, 'python_version': platform.python_version(),
+                    'assets': records, 'installed_files': installed_files}
+    (ROOT / 'tools/installed-assets.json').write_text(
+        json.dumps(installation, indent=2, ensure_ascii=False), encoding='utf-8')
     subprocess.run([python, ROOT / 'workflow.py', 'doctor'], check=True)
 
 

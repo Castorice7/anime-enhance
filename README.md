@@ -1,5 +1,9 @@
 # anime-enhance
 
+[![CPU regression tests](https://github.com/Castorice7/anime-enhance/actions/workflows/tests.yml/badge.svg)](https://github.com/Castorice7/anime-enhance/actions/workflows/tests.yml) · [Changelog](CHANGELOG.md) · [Releases](https://github.com/Castorice7/anime-enhance/releases) · [Contributing](CONTRIBUTING.md) · [Security](SECURITY.md)
+
+当前版本：`0.1.0`。这是一个面向 Windows x64 的本地工具，不是 HoYoverse / miHoYo 官方产品。
+
 本地二次元图片超分、视频精准抽帧与附近候选帧筛选工具。适用于游戏画面、动画、PV、MMD 与二次元图片。
 
 **默认保真 2×，保留原文件与透明通道。** 使用 FFmpeg、yt-dlp 和 Real-ESRGAN-ncnn-vulkan，增强在本机 GPU 上执行，不上传图片到云端。
@@ -24,9 +28,12 @@ Local anime image upscaling and timestamp-aware video frame extraction for Windo
 ```powershell
 py -3.12 setup.py
 .\run.cmd doctor
+.\run.cmd --version
 ```
 
 没有 `py` 时，确认 `python --version` 为 3.12 后使用 `python setup.py`。安装创建 `tools/venv` 独立环境，不修改系统 Python 包。工具和模型从上游下载并校验 SHA-256；哈希用于复现，不是发行者签名。`doctor` 检查文件与路径，实际 GPU 工作状态需用图片命令或集成测试验证。
+
+安装完成后可运行 `.\run.cmd doctor --deep`，用临时 8×8 图片执行一次真实 NCNN 推理；检查不会使用或覆盖你的图片，也不会把测试图写入 `output`。
 
 移动整个项目后建议重新创建 `tools/venv`；Windows Python 虚拟环境不承诺可搬移。
 

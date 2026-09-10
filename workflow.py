@@ -9,6 +9,7 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
 import time
 import uuid
 from datetime import datetime
@@ -20,6 +21,7 @@ import numpy as np
 from PIL import Image, ImageDraw, ImageFilter, ImageOps
 
 ROOT = Path(__file__).resolve().parent
+VERSION = '0.1.0'
 CONFIG = json.loads((ROOT / 'config.json').read_text(encoding='utf-8'))
 if (ROOT / 'config.local.json').is_file():
     for key, value in json.loads((ROOT / 'config.local.json').read_text(encoding='utf-8')).items():
@@ -41,6 +43,15 @@ def digest(path):
         for block in iter(lambda: f.read(8 * 1024 * 1024), b''):
             h.update(block)
     return h.hexdigest()
+
+
+def project_relative(path):
+    """Return a portable project-relative path, or None for external inputs."""
+    path = Path(path).resolve()
+    try:
+        return path.relative_to(ROOT).as_posix()
+    except ValueError:
+        return None
 
 
 def job_dir(folder, name):
@@ -158,7 +169,9 @@ def enhance(source, level='faithful', scale=None, gpu=None):
             raise RuntimeError('尺寸或透明通道验证失败')
     if digest(source) != original_hash:
         raise RuntimeError('源文件哈希发生变化')
-    manifest = {'source': str(source), 'source_sha256': original_hash, 'output': str(filename),
+    manifest = {'manifest_version': 1, 'source': str(source),
+                'source_relative': project_relative(source), 'source_sha256': original_hash,
+                'output': str(filename), 'output_relative': project_relative(filename),
                 'output_sha256': digest(filename), 'source_size': [w, h], 'output_size': list(target),
                 'level': level, 'scale': scale, 'model': 'realesrgan-x4plus-anime',
                 'model_sha256': digest(ROOT / 'models/realesrgan-x4plus-anime.bin'),
@@ -215,10 +228,10 @@ def download(url):
     meta = next(folder.glob('*.info.json'))
     selected = json.loads(meta.read_text(encoding='utf-8'))
     fields = ('format_id', 'width', 'height', 'fps', 'vcodec', 'tbr', 'dynamic_range')
-    manifest = {'url': url, 'title': info.get('title'), 'uploader': info.get('uploader'),
+    manifest = {'manifest_version': 1, 'url': url, 'title': info.get('title'), 'uploader': info.get('uploader'),
                 'channel_id': info.get('channel_id'), 'channel_url': info.get('channel_url'),
                 'official_channel_verified': info.get('channel_id') in CONFIG['official_channels'],
-                'path': str(media), 'sha256': digest(media),
+                'path': str(media), 'path_relative': project_relative(media), 'sha256': digest(media),
                 'quality_scope': '最高公开可访问格式；不代表服务器母版或受限画质',
                 'selected': {k: selected.get(k) for k in fields},
                 'available_formats': [{k: f.get(k) for k in fields} for f in formats]}
@@ -352,7 +365,7 @@ def contact_sheet(records, folder, name):
 
 
 def extract(source, target, nearby=False, count=21, radius=1, roi=None, extract_only=False,
-            level='faithful', scale=None, gpu=None):
+            level='faithful', scale=None, gpu=None, source_manifest=None):
     source = Path(source).resolve(strict=True)
     folder = job_dir('frames', f'{source.stem}_{target:.3f}s')
     source_hash = digest(source)
@@ -371,7 +384,8 @@ def extract(source, target, nearby=False, count=21, radius=1, roi=None, extract_
     records, hists, thumbs = [], [], []
     for p, i in zip(files, chosen):
         metrics, hist, thumb = frame_metrics(p, roi)
-        records.append({**rows[i], 'path': str(p), 'sha256': digest(p), **metrics})
+        records.append({**rows[i], 'path': str(p), 'path_relative': project_relative(p),
+                        'sha256': digest(p), **metrics})
         hists.append(hist)
         thumbs.append(thumb)
     center = min(range(len(records)), key=lambda i: abs(records[i]['time']-target))
@@ -404,14 +418,19 @@ def extract(source, target, nearby=False, count=21, radius=1, roi=None, extract_
     shutil.copy2(selected['path'], folder / 'selected_original.png')
     contact_sheet(ranked, folder, 'candidates_contact_sheet.jpg')
     contact_sheet(top, folder, 'top3_contact_sheet.jpg')
-    manifest = {'source': str(source), 'source_sha256': source_hash, 'requested_time': target,
+    manifest = {'manifest_version': 1, 'source': str(source),
+                'source_relative': project_relative(source), 'source_sha256': source_hash,
+                'source_manifest': str(source_manifest) if source_manifest else None,
+                'source_manifest_relative': project_relative(source_manifest) if source_manifest else None,
+                'requested_time': target,
                 'mode': 'nearby' if nearby else 'exact', 'radius_seconds': radius if nearby else 0,
                 'timestamp_policy': 'nearest actual display PTS; tie -> earlier frame',
                 'selected': selected, 'time_error_seconds': selected['time']-target,
                 'ranking_method': 'heuristic: face/ROI sharpness, sharpness, blockiness, shot and time proximity',
                 'visual_review': 'pending' if nearby else 'not_requested',
                 'semantic_limitations': ['闭眼', '面部自然度', '字幕遮挡', '转场残影或拉伸须视觉复核'],
-                'candidates': ranked, 'original': str(folder / 'selected_original.png')}
+                'candidates': ranked, 'original': str(folder / 'selected_original.png'),
+                'original_relative': project_relative(folder / 'selected_original.png')}
     if digest(source) != source_hash:
         raise RuntimeError('源视频哈希发生变化')
     write_json(folder / 'frames.json', manifest)
@@ -436,14 +455,46 @@ def choose(manifest_path, rank, reason, level, scale, gpu):
     raw = folder / 'selected_original.png'
     shutil.copy2(src, raw)
     result = enhance(raw, level, scale, gpu)
-    write_json(folder / 'review.json', {'previous_manifest': str(path), 'selected': row,
+    write_json(folder / 'review.json', {'manifest_version': 1, 'previous_manifest': str(path),
+                                      'previous_manifest_relative': project_relative(path),
+                                      'selected': row,
                                       'visual_review': 'completed', 'reason': reason,
                                       'enhancement': result})
     return result
 
 
+def doctor(deep=False):
+    print('anime-enhance:', VERSION)
+    print('Python:', sys.executable)
+    for name in ('ffmpeg', 'ffprobe', 'realesrgan'):
+        print(name, tool(name))
+    for ext in ('bin', 'param'):
+        path = ROOT / f'models/realesrgan-x4plus-anime.{ext}'
+        print(path, digest(path))
+    print(run([sys.executable, '-m', 'yt_dlp', '--version']))
+    print('GPU:', CONFIG['gpu_id'] if CONFIG['gpu_id'] is not None else 'auto', '（GPU 实际运行请查看 inference.log）')
+    if not deep:
+        return
+    with tempfile.TemporaryDirectory(prefix='anime-enhance-doctor-') as temp:
+        temp = Path(temp)
+        source = temp / 'probe.png'
+        output = temp / 'probe_x4.png'
+        Image.new('RGB', (8, 8), '#6f8fb8').save(source)
+        cmd = [tool('realesrgan'), '-i', source, '-o', output, '-m', ROOT / 'models',
+               '-n', 'realesrgan-x4plus-anime', '-s', '4', '-t', str(min(CONFIG['tile_size'], 32)),
+               '-j', '1:1:1', '-f', 'png']
+        if CONFIG['gpu_id'] is not None:
+            cmd += ['-g', str(CONFIG['gpu_id'])]
+        run(cmd, temp / 'inference.log', timeout=300)
+        with Image.open(output) as result:
+            if result.size != (32, 32):
+                raise RuntimeError(f'深度检查输出尺寸异常: {result.size}')
+        print('Deep NCNN inference: PASS（8×8 → 32×32）')
+
+
 def main():
     p = argparse.ArgumentParser(description='二次元图片 / 视频帧获取与画质修复（默认保真 2×）')
+    p.add_argument('--version', action='version', version=f'%(prog)s {VERSION}')
     sub = p.add_subparsers(dest='cmd', required=True)
     def quality(parser):
         parser.add_argument('--level', choices=list(LEVELS), default='faithful')
@@ -470,7 +521,8 @@ def main():
     ch.add_argument('--rank', required=True, type=int)
     ch.add_argument('--reason', required=True)
     quality(ch)
-    sub.add_parser('doctor', help='检查工具、模型和依赖')
+    doc = sub.add_parser('doctor', help='检查工具、模型和依赖')
+    doc.add_argument('--deep', action='store_true', help='执行一次最小 NCNN/GPU 推理验证')
     args = p.parse_args()
     if args.cmd == 'image':
         for source in args.paths:
@@ -482,9 +534,13 @@ def main():
             x, y, w, h = args.roi
             if not all(math.isfinite(v) for v in args.roi) or min(x,y) < 0 or min(w,h) <= 0 or x+w > 1 or y+h > 1:
                 p.error('ROI 必须位于 [0,1] 图像范围内')
-        src = download(args.source) if re.match(r'^https?://', args.source) else args.source
+        source_manifest = None
+        is_url = bool(re.match(r'^https?://', args.source))
+        src = download(args.source) if is_url else args.source
+        if is_url:
+            source_manifest = Path(src).parent / 'source.json'
         extract(src, args.time, args.nearby, args.candidates, args.radius, args.roi,
-                args.extract_only, args.level, args.scale, args.gpu)
+                args.extract_only, args.level, args.scale, args.gpu, source_manifest)
     elif args.cmd == 'download':
         download(args.url)
     elif args.cmd == 'search':
@@ -492,14 +548,7 @@ def main():
     elif args.cmd == 'choose':
         choose(args.manifest, args.rank, args.reason, args.level, args.scale, args.gpu)
     elif args.cmd == 'doctor':
-        print('Python:', sys.executable)
-        for name in ('ffmpeg', 'ffprobe', 'realesrgan'):
-            print(name, tool(name))
-        for ext in ('bin', 'param'):
-            path = ROOT / f'models/realesrgan-x4plus-anime.{ext}'
-            print(path, digest(path))
-        print(run([sys.executable, '-m', 'yt_dlp', '--version']))
-        print('GPU:', CONFIG['gpu_id'] if CONFIG['gpu_id'] is not None else 'auto', '（GPU 实际运行请查看 inference.log）')
+        doctor(args.deep)
 
 
 if __name__ == '__main__':

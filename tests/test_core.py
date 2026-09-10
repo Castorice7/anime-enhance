@@ -82,6 +82,10 @@ class InputSafetyTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             wf.enhance(path, level='ultra', scale=2)
 
+    def test_project_relative_path_is_portable(self):
+        inside = self.root / 'output' / 'job' / 'result.json'
+        self.assertEqual(wf.project_relative(inside), 'output/job/result.json')
+
 
 if __name__ == '__main__':
     unittest.main()
