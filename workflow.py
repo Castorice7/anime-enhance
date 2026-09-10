@@ -48,8 +48,9 @@ def digest(path):
 def project_relative(path):
     """Return a portable project-relative path, or None for external inputs."""
     path = Path(path).resolve()
+    root = ROOT.resolve()
     try:
-        return path.relative_to(ROOT).as_posix()
+        return path.relative_to(root).as_posix()
     except ValueError:
         return None
 
